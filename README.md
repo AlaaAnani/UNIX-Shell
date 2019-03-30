@@ -5,3 +5,4 @@ It supports:
 2. History features (Running the previous command by typing "!!")
 3. Input and output redirection of commands.
 4. Communication via a Pipe.
+All copy rights © go to Alaa Anani.
