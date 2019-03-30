@@ -1,0 +1,8 @@
+  PID TTY          TIME CMD
+12899 pts/23   00:00:00 bash
+13004 pts/23   00:00:00 less
+13010 pts/23   00:00:00 ls <defunct>
+13034 pts/23   00:00:00 less
+13039 pts/23   00:00:00 ls <defunct>
+13203 pts/23   00:00:00 main
+13233 pts/23   00:00:00 ps
