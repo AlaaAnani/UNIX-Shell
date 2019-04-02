@@ -54,6 +54,8 @@ int main(void)
         FlagsDefaultSettings();
         printf(GRN"AAA's>>"RESET);
         memset(command, 0, MAX_LINE);
+        
+
         fgets (command, MAX_LINE, stdin);
         fflush(stdout);       
         //If user entered exit, return 0. Otherwise, start parsing the command.
@@ -129,7 +131,7 @@ int main(void)
                     last_i = i;                 
                 }
                 args2[last_i + 1] = NULL;                
-                pipe(pipefd);
+                
                 
 
             }
@@ -160,17 +162,47 @@ int main(void)
                     {
                         if(input_redirection_flag == 1 | output_redirection_flag == 1)
                         {    
-                            
-                            char *args_new[] = {args[0], NULL};
-                            state = execvp(args[0], args_new);
+                            char *args_new[MAX_LINE/2 + 1];
+                            for(int i=0; !(strcmp(args[i], "<") == 0 || strcmp(args[i], ">") == 0); i++)
+                                args_new[i] = args[i]; 
+                            state = execvp(args_new[0], args_new);
+                            printf(KRED"Error occured"RESET);
+                            exit(-1);
                         }
                         else if(pipe_flag == 1)
                         {
+                            pid_t pid_2;
+                            pipe(pipefd);
+                            pid_2 = fork();
+                            
+                            if(pid_2 <0)
+                            {    
+                                printf("PID returned -1. Fork failed.");
+                                return 0;
+                            }
+                            else if(pid_2 == 0) // create grandchild
+                            {
                             saved_stdout = dup(1);
                             dup2(pipefd[1], 1);     //Replace stdout with the output part of the pipe
                             close(pipefd[0]);       //close unused input side of the pipe
                             execvp(args1[0], args1);//Enter command that will produce output to the other command with ags2
+                            printf("Command %s not found. \n", args1[0]);
+                            exit(-1);
+                            }
+                            else if(pid_2 > 0) //run in child of shell (parent of grandchild)
+                            {
+                                wait(NULL);
+                                saved_stdin = dup(0);
+                                dup2(pipefd[0], 0); //Replace stdin with the input part of the pipe
+                                close(pipefd[1]);   //close output part of the pipe
+                                state2 = execvp(args2[0], args2); //execute command that will take input from the pipe
+                                
+                                if(state2 <0)
+                                printf("Command %s not found. \n", args1[0]);
+                                exit(-1);
+                            }
                         }
+
                         else    //No piping or redirection commands
                         {
                             state = execvp(args[0], args);
@@ -178,19 +210,12 @@ int main(void)
                         
                         if(state <0)
                         printf(KRED"Command %s not found. \n"RESET, args[0]);
+                        exit(0);
                     }
                     else        //Parent process
                     {
-                        if(pipe_flag == 1)
-                        {
-                            saved_stdin = dup(0);
-                            dup2(pipefd[0], 0); //Replace stdin with the input part of the pipe
-                            close(pipefd[1]);   //close output part of the pipe
-                            state2 = execvp(args2[0], args2); //execute command that will take input from the pipe
-                            if(state2 <0)
-                            printf("Command %s not found. \n", args1[0]);
-                        }
-                        else if(p_wait_flag == 1)
+                       
+                        if(p_wait_flag == 1)
                         { 
                             wait(NULL);
                         }
@@ -225,6 +250,8 @@ void ParseCommand(char * command, char ** args, int command_count, char **comman
     int command_len = strlen(command);  //length of the command    
     int arg_i = -1;                     //starting index of the next arguement
     int prev_command = 0;
+    int history = 0;
+    
 
 
     //Need to know which command to parse first. If the command is !!, then the previous command is to be parsed.
@@ -268,7 +295,7 @@ void ParseCommand(char * command, char ** args, int command_count, char **comman
                 args_count++;
             }
             command[i] = '\0'; 
-            args[args_count+1] = NULL;   
+            //args[args_count+1] = NULL;   
             break;
 
             default:                     
@@ -280,7 +307,7 @@ void ParseCommand(char * command, char ** args, int command_count, char **comman
                 p_wait_flag = 0;    //parent won't invoke wait()
                 command[i] = '\0'; 
                 i++;
-                args[args_count+1] = NULL; 
+                //args[args_count+1] = NULL; 
             }
             break;
                            
@@ -288,8 +315,9 @@ void ParseCommand(char * command, char ** args, int command_count, char **comman
         }    
     }  
     
-
-
+/*for(int i=0; i< args_count; i++)
+printf("args[%d]:%s\n", i, args[i]);*/
+args[args_count] = NULL;
 
 }
 
