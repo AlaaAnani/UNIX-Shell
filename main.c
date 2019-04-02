@@ -6,6 +6,11 @@
 #include <sys/types.h>
 #include <fcntl.h> 
 #define MAX_LINE 1024               /* The maximum length command */
+#define KRED  "\x1B[31m"
+#define RESET "\x1b[0m"
+#define GRN   "\x1B[32m"
+#define YEL   "\x1B[33m"
+#define BLU   "\x1B[34m"
 
 int p_wait_flag = 1;                //parent invokes wait if flag is 1
 int input_redirection_flag = 0;     //if 1, default input comes from file
@@ -18,6 +23,7 @@ pipe_flag   => If command requires communication between two command through a p
 pipe_index  => index of "|" in a command.
 p_command2  => Starting index of the command after "|" in a pipe command.
 */
+int exit_sh = 0;
 
 void ParseCommand(char * command, char ** args, int command_count, char **command_history_buffer);
 void CheckForRedirection( char ** args);
@@ -27,7 +33,7 @@ void CheckForPipes(char ** args);
 
 int main(void)
 {
-    printf("Hello :) \n");    
+    printf(YEL"Hello :) \n"RESET);    
     int should_run = 1;     //To determine when to exit the shell program.
     pid_t pid;              //To store process id after forking.
     char **args = malloc(sizeof(char) * (MAX_LINE/2 + 1));          //To store every arguement in a command
@@ -40,11 +46,11 @@ int main(void)
     char ** args2 = malloc(sizeof(char) * (MAX_LINE/2 + 1));    //In case of pipes: args of the command on the right
     
     
-    while(should_run)                                         
+    while(should_run && exit_sh == 0)                                         
     {   
 
         FlagsDefaultSettings();
-        printf("A's Shell>>");
+        printf(GRN"AAA's>>"RESET);
         memset(command, 0, MAX_LINE);
         fgets (command, MAX_LINE, stdin);
         fflush(stdout);       
@@ -52,13 +58,8 @@ int main(void)
         if(strlen(command) <= 0)
         {   
             return 0;      
-        }  
-        else if(strcmp(command, "exit\n") == 0)
-        {
-            should_run = 0;
-            return 0;
-        }
-        else
+        } 
+        else 
         {
             //Store command in command history buffer
             command_history_buffer[command_count] = malloc(sizeof(char) * strlen(command));
@@ -127,66 +128,74 @@ int main(void)
                 }
                 args2[last_i + 1] = NULL;                
                 pipe(pipefd);
-                /*for(int i=0; args1[i] != NULL; i++)
+                
+
+            }
+
+            for(int i=0; args[i] != NULL;i ++)
+            {
+                if(strcmp(args[i], "exit") == 0)
+                exit_sh = 1;
+            }
+
+            if(exit_sh != 1)
+            {
+                pid = fork();           //create process
+
+                if(pid == -1)           //Error occured creating the clone process
                 {
-                    printf(" args 1 %s \n", args1[i]);
+                    printf("PID returned -1. Fork failed.");
+                    return 0;
                 }
-                for(int i=0; args2[i] != NULL; i++)
+                else if(pid == 0)        //The child (new) process
                 {
-                    printf(" args 2 %s \n", args2[i]);
-                }*/
-
-            }
-
-
-            pid = fork();           //create process
-
-            if(pid == -1)           //Error occured creating the clone process
-            {
-                printf("PID returned -1. Fork failed.");
-                exit(1);  
-            }
-            else if(pid == 0)        //The child (new) process
-            {
-                if(input_redirection_flag == 1 | output_redirection_flag == 1)
-                {    
+                    if(input_redirection_flag == 1 | output_redirection_flag == 1)
+                    {    
+                        
+                        char *args_new[] = {args[0], NULL};
+                        state = execvp(args[0], args_new);
+                    }
+                    else if(pipe_flag == 1)
+                    {
+                        saved_stdout = dup(1);
+                        dup2(pipefd[1], 1);     //Replace stdout with the output part of the pipe
+                        close(pipefd[0]);       //close unused input side of the pipe
+                        execvp(args1[0], args1);//Enter command that will produce output to the other command with ags2
+                    }
+                    else    //No piping or redirection commands
+                    {
+                        state = execvp(args[0], args);
+                    }
                     
-                    char *args_new[] = {args[0], NULL};
-                    state = execvp(args[0], args_new);
+                    if(state <0)
+                    printf(KRED"Command %s not found. \n"RESET, args[0]);
                 }
-                else if(pipe_flag == 1)
+                else        //Parent process
                 {
-                    saved_stdout = dup(1);
-                    dup2(pipefd[1], 1);     //Replace stdout with the output part of the pipe
-                    close(pipefd[0]);       //close unused input side of the pipe
-                    execvp(args1[0], args1);//Enter command that will produce output to the other command with ags2
-                }
-                else    //No piping or redirection commands
-                {
-                    state = execvp(args[0], args);
-                }
-                
-                if(state <0)
-                printf("Command %s not found. \n", args[0]);
-            }
-            else        //Parent process
-            {
-                if(pipe_flag == 1)
-                {
-                    saved_stdin = dup(0);
-                    dup2(pipefd[0], 0); //Replace stdin with the input part of the pipe
-                    close(pipefd[1]);   //close output part of the pipe
-                    state2 = execvp(args2[0], args2); //execute command that will take input from the pipe
-                    if(state2 <0)
-                    printf("Command %s not found. \n", args1[0]);
-                }
-                else if(p_wait_flag == 1)
-                { 
-                    wait(NULL);
-                }
+                    if(pipe_flag == 1)
+                    {
+                        saved_stdin = dup(0);
+                        dup2(pipefd[0], 0); //Replace stdin with the input part of the pipe
+                        close(pipefd[1]);   //close output part of the pipe
+                        state2 = execvp(args2[0], args2); //execute command that will take input from the pipe
+                        if(state2 <0)
+                        printf("Command %s not found. \n", args1[0]);
+                    }
+                    else if(p_wait_flag == 1)
+                    { 
+                        wait(NULL);
+                    }
 
+                    
+                }
+            }
+            else
+            {
+                printf(YEL"Goodbye. :)\n"RESET);
+                should_run  = 0;
                 
             }
+            
             
 
         }
@@ -312,6 +321,7 @@ void FlagsDefaultSettings()
         output_redirection_flag = 0;
         p_wait_flag = 1;
         pipe_flag = 0;
+        exit_sh  =0;
 }
 
 void CheckForPipes(char ** args)
