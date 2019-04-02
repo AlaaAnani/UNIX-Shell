@@ -25,9 +25,11 @@ p_command2  => Starting index of the command after "|" in a pipe command.
 */
 int exit_sh = 0;
 int empty_command = 0;
+int command_count = 0;                                          //To count commands
 
 
-void ParseCommand(char * command, char ** args, int command_count, char **command_history_buffer);
+
+void ParseCommand(char * command, char ** args);
 void CheckForRedirection( char ** args);
 void FlagsDefaultSettings();
 void CheckForPipes(char ** args);
@@ -40,13 +42,13 @@ int main(void)
     pid_t pid;              //To store process id after forking.
     char **args = malloc(sizeof(char) * (MAX_LINE/2 + 1));          //To store every arguement in a command
     char *command = malloc(sizeof(char) * MAX_LINE);                //To store the currently typed command
-    char **command_history_buffer = malloc(sizeof(char) * MAX_LINE); //To store commands and allow for history display
-    int command_count = 0;                                          //To count commands
+    char *command_history_buffer = malloc(sizeof(char) * MAX_LINE); //To store commands and allow for history display
     int state, state2;      //To store state of executing a command in a child and parent process.                          
     int pipefd[2];          //To store piping channels that commands will communicate through
     char ** args1 = malloc(sizeof(char) * (MAX_LINE/2 + 1));    //In case of pipes: args for the command on the left
     char ** args2 = malloc(sizeof(char) * (MAX_LINE/2 + 1));    //In case of pipes: args of the command on the right
-    
+    char *command_to_parse = malloc(sizeof(char) * MAX_LINE);                //To store the currently typed command
+
     
     while(should_run && exit_sh == 0)                                         
     {   
@@ -65,14 +67,32 @@ int main(void)
         } 
         else 
         {
-            //Store command in command history buffer
-            command_history_buffer[command_count] = malloc(sizeof(char) * strlen(command));
+            strcpy(command_to_parse, command);
+            ParseCommand(command_to_parse, args);
+            int history_cmd = 0;
+            for(int i =0; args[i] != NULL; i++)
+            {
+                if(strcmp(args[i], "!!") == 0)
+                history_cmd = 1;
+            }
+
+            if(history_cmd == 1)
+            { 
+                if(command_count <= 0)
+                {   printf(KRED"No commands in history \n"RESET);
+                    continue;
+                }
+                printf("%s\n", command_history_buffer);
+                strcpy(command, command_history_buffer); 
+                strcpy(command_to_parse, command);
+                ParseCommand(command_to_parse, args);
+            }
             /*Store it by value since the command will be adjusted in parsing 
             and the buffer needs to store original command.*/
-            strcpy(command_history_buffer[command_count], command);
+            strcpy(command_history_buffer, command);
             command_count++;
 
-            ParseCommand(command, args, command_count, command_history_buffer);
+            
 
             CheckForRedirection(args);
             CheckForPipes(args);
@@ -97,7 +117,7 @@ int main(void)
 
             if(output_redirection_flag == 1)
             {
-                out = open("out.txt", O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
+                out = open(args[outfile_index], O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
                 if(in <0)
                 {
                     printf("Failed to open file with name %s \n", args[outfile_index]);
@@ -244,7 +264,7 @@ int main(void)
 return 0;
 }
 
-void ParseCommand(char * command, char ** args, int command_count, char **command_history_buffer)
+void ParseCommand(char * command, char ** args)
 {
     int args_count =0;                  //to determine the current number of arguements
     int command_len = strlen(command);  //length of the command    
@@ -252,25 +272,6 @@ void ParseCommand(char * command, char ** args, int command_count, char **comman
     int prev_command = 0;
     int history = 0;
     
-
-
-    //Need to know which command to parse first. If the command is !!, then the previous command is to be parsed.
-    if( strcmp(command, "!!\n") == 0 )
-    {
-        if(command_count <= 0)
-            printf("No commands in history");
-        else
-        {
-            strcpy(command, command_history_buffer[command_count-2]); 
-            command_len = strlen(command);
-            printf("%s", command);
-            //for(int i=0; i< command_count; i++)
-            //printf(" command !! to  %s \n", command_history_buffer[i]);
-            //Let !! execute the most recent entry in the command history buffer before !!
-        }
-        
-        
-    }
 
     for(int i =0; i < command_len; i++)
     {                     
